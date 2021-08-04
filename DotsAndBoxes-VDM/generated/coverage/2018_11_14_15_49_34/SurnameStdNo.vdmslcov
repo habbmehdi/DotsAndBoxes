@@ -1,0 +1,151 @@
+module Habbouly16050314
+imports from IO		 operations  print		renamed print;
+                   
+exports all
+definitions 
+
+values
+          
+  SIZE:nat1 = 4; -- The size of the board (4x4)           
+
+  BOXN:nat1 = (2*SIZE)+1;  -- number of boxes(3x3)
+
+  DOTN:nat1 = SIZE*SIZE;  --number of dots(4x4)
+
+types
+
+  Player :: boxes : set of nat1
+            movelist : set of Move;
+         
+  Dot = nat1
+  inv dot == dot < DOTN+1;
+
+  Move :: dot1:Dot 
+          dot2:Dot 
+  inv move == move.dot2 > move.dot1
+      and DOTN >= move.dot2
+      and if move.dot1 mod SIZE = 0 
+             then move.dot2 = move.dot1+SIZE
+      else 
+             move.dot2 = move.dot1+1 or move.dot2 = move.dot1+SIZE;
+
+   
+  Box :: no : nat1 --box number
+         moves : set of Move -- the moves that form said box 
+  inv box == card box.moves<=4 ;
+
+
+  Boxs = set of Box
+  inv ml == BOXN >= card ml;
+    
+    
+  result = <P1HASWON> | <P2HASWON> | <DRAW>;  
+values 
+  
+  p1 : Player = mk_Player({},{});
+  p2 : Player = mk_Player({},{});
+
+  -- In this case, a box number is it's smallest dot
+  BoxList : Boxs =  { mk_Box(s,{mk_Move(s,s+1),
+                                mk_Move(s,s+SIZE),
+                                mk_Move(s+1,s+1+SIZE),
+                                mk_Move(s+SIZE,s+SIZE+1)}) 
+                                |s in set {1, ...,DOTN-SIZE} & s mod SIZE <> 0} ;
+  
+functions 
+
+
+removeFromBoxes: Move * set of Box -> set of Box
+removeFromBoxes(move,Boxes) ==
+        {mk_Box(box.no,box.moves \ {mk_Move(move.dot1,move.dot2)}) | box in set Boxes & box.moves <> {move}}
+    pre Boxes <> {}
+    post not exists x in set RESULT & move in set x.moves;
+    
+   
+chooseMove: Move * Player * set of Box -> Player 
+chooseMove(coordinates,ply1,bl) ==   
+     if exists x in set bl &
+      x.moves = {coordinates} then
+         mk_Player(ply1.boxes union {x.no | x in set bl & x.moves = {coordinates}},ply1.movelist union {coordinates})
+     else 
+         mk_Player(ply1.boxes,ply1.movelist union {coordinates})
+pre exists x in set bl & coordinates in set x.moves 
+post exists x in set RESULT.movelist & coordinates = x ;      
+ 
+switchPlayers: bool -> bool
+switchPlayers(p1plays) ==  
+    if p1plays then 
+        false 
+    else 
+        true;
+
+isTurnPl1: Move * set of Box * bool -> bool 
+isTurnPl1(move,boxlist,p1plays) == 
+     if exists x in set boxlist &
+      x.moves = {move} then
+         p1plays
+     else 
+         switchPlayers(p1plays)
+pre exists x in set boxlist & move in set x.moves;
+
+
+tally : Player * Player  -> result
+tally(Pl1,Pl2) ==  
+      if card Pl1.boxes > card Pl2.boxes then
+          <P1HASWON>
+      elseif card Pl1.boxes < card Pl2.boxes then 
+          <P2HASWON>
+      else 
+          <DRAW>
+pre Pl1 <> Pl2 ;
+
+
+state  DBGame  of
+  P1: Player
+  P2: Player
+  p1plays: bool
+  BoxList1: set of Box
+  inv  mk_DBGame(P1,P2,p1plays,BoxList1)  ==
+   -- valid_moves(possible_moves)  --  only  valid  moves  are  possible
+   -- and
+    forall i in set P1.movelist & 
+    forall x in set P2.movelist &
+    i <> x                            --  players  don’t  share  moves
+    and
+    forall z in set BoxList1 &
+    forall s in set z.moves & 
+    i <> s 
+    and 
+    i <> x                        --  played  moves  aren’t  available
+  --and
+  --....                             --  other  invariants  of  interest
+  init  s  ==  s  =  mk_DBGame(p1,p2,true,BoxList)
+end
+
+
+operations         
+         
+         
+-- this is the operation that needs to be run to play the game, ex print save_move(mk_Move(1,2)) once there are no moves left to be made, then tally counts and announces the winner 
+    
+play_move(move : Move) ==
+  if p1plays then  
+          atomic(
+          p1plays := isTurnPl1(move,BoxList1,p1plays);
+          P1 := chooseMove(move,P1,BoxList1);
+          BoxList1 := removeFromBoxes(move,BoxList1);
+      )   
+  else
+      atomic(
+          p1plays := isTurnPl1(move,BoxList1,p1plays);
+          P2 := chooseMove(move,P2,BoxList1);
+          BoxList1 := removeFromBoxes(move,BoxList1);
+        )  
+ext wr BoxList1, P1, P2, p1plays
+pre exists m in set BoxList1 & move in set m.moves
+post BoxList1~ <> BoxList1 and (P1~ <> P1 or P2~ <> P2)
+     and forall x in set BoxList1 & forall y in set x.moves & y <> move;
+
+
+
+end Habbouly16050314

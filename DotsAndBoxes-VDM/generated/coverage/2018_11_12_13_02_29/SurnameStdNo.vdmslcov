@@ -1,0 +1,175 @@
+module Habbouly16050314
+--imports from IO		 operations  println	renamed println;
+--                   print		renamed print
+exports all
+definitions 
+
+values
+          
+  SIZE:nat1 = 4; -- The size of the board (4x4)           
+
+  BOXN = (2*SIZE)+1;  -- number of boxes(3x3)
+
+  DOTN = SIZE*SIZE;  --number of dots(4x4)
+
+  MOVEN:nat1 = 24;  --number of moves
+
+types
+
+  Player :: boxes : set of nat
+            movelist : set of Move;
+         
+  Dot = nat1
+  inv dot == dot < DOTN+1;
+
+  Move :: dot1:Dot 
+          dot2:Dot 
+  inv move == move.dot2 > move.dot1
+      and if move.dot1 mod SIZE = 0 
+             then move.dot2 = move.dot1+SIZE
+      else 
+             move.dot2 = move.dot1+1 or move.dot2 = move.dot1+SIZE;
+
+   
+  Box :: no : nat --box number
+         moves : set of Move -- the moves that form said box 
+  inv box == card box.moves<=4 
+  and forall x in set box.moves 
+  & x.dot2 < DOTN+1 ;
+
+
+  Boxs = set of Box
+  inv ml == card ml <= BOXN;
+    
+values 
+  
+  p1 : Player = mk_Player({},{});
+  p2 : Player = mk_Player({},{});
+  
+  --dotlist:set of Dot = {1, ..., DOTN};  -- list of dots 
+  q:set of nat1 = {1, ...,DOTN-SIZE};
+  p:set of nat1 = {i | i in set q & i mod SIZE <> 0};
+
+  -- In this case, a box number is it's smallest dot
+    BoxList : Boxs =  { mk_Box(s,{mk_Move(s,s+1),
+                                  mk_Move(s,s+SIZE),
+                                  mk_Move(s+1,s+1+SIZE),
+                                  mk_Move(s+SIZE,s+SIZE+1)}) 
+                                  |s in set q & s mod SIZE <> 0} ;
+  
+  pl1plays : bool = true;
+  
+  functions 
+
+-- check if any moves are left to be played
+movesLeft: set of Box -> bool
+movesLeft(boxes) == 
+    if forall x in set boxes &
+    x.moves <> {} then true 
+    else false;
+    
+removeFromBoxes: Move * set of Box -> set of Box
+removeFromBoxes(move,Boxes) ==
+    if exists x in set Boxes 
+    & card x.moves = 1 
+    and x.moves = {move} then
+        {mk_Box(box.no,box.moves \ {mk_Move(move.dot1,move.dot2)}) | box in set Boxes & box.moves <> {move}}
+    else
+        {mk_Box(box.no,box.moves \ {mk_Move(move.dot1,move.dot2)}) | box in set Boxes};
+   
+chooseMove: Move * Player * set of Box -> Player 
+chooseMove(coordinates,ply1,bl) == 
+     if exists x in set bl &
+      card x.moves = 1 and 
+      x.moves = {coordinates} then
+         mk_Player(ply1.boxes union {x.no | x in set bl & x.moves = {coordinates}},ply1.movelist union {coordinates})
+     else 
+         mk_Player(ply1.boxes,ply1.movelist union {coordinates});
+     
+ 
+  /*****************************  Game  state  *****************************/
+--  state  records  each  of  the  players  moves  ,  who  is  playing  ,  and  all
+--  remaining  possible  moves  .  The  play  algorithm  ensures  fairness
+--  (i.e.  players  take  turns  ,  and  making  a  box  awards  another  move  )  .
+--  Initially  p1  start  ,  no  moves  are  played  all  valid  moves  are  possible  .
+state  DBGame  of
+  P1: Player
+  P2: Player
+  p1plays: bool
+  BoxList1: set of Box
+  inv  mk_DBGame(P1,P2,p1plays,BoxList1)  ==
+   -- valid_moves(possible_moves)  --  only  valid  moves  are  possible
+   -- and
+    forall i in set P1.movelist & 
+    forall x in set P2.movelist &
+    i <> x                            --  players  don’t  share  moves
+    and
+    forall z in set BoxList1 &
+    forall s in set z.moves & 
+    i <> s 
+    and 
+    i <> x                        --  played  moves  aren’t  available
+  --and
+  --....                             --  other  invariants  of  interest
+  init  s  ==  s  =  mk_DBGame(p1,p2,pl1plays,BoxList)
+end
+
+/*******************  Fair  play  top  -  level  algorithm  *******************/
+--  top  -  level  algorithm  for  fair  game  play  :
+--  a)  while  there  are  moves  left
+--  1)  choose  a  coordinate
+--  2)  calculate  the  move  for  coordinate
+--  3)  update  state  with  chosen  move
+--  4)  test  whether  move  made  box
+--  5)  flip  player  i f  so  ;  clear  box  from  state  otherwise
+--  b)  tally  and  print  results~
+
+operations 
+
+switchPlayers: () ==> bool
+switchPlayers() ==  
+    if p1plays then 
+        return false 
+    else 
+        return  true;
+
+isTurnPl1: Move  ==> bool 
+isTurnPl1(move) == 
+     if exists x in set BoxList1 &
+      card x.moves = 1 and 
+      x.moves = {move} then
+         return p1plays
+     else 
+         return switchPlayers();
+
+save(move : Move) ==
+  if p1plays then  
+          atomic(
+          p1plays := isTurnPl1(move);
+          P1 := chooseMove(move,P1,BoxList1);
+          BoxList1 := removeFromBoxes(move,BoxList1);
+      )  
+  else   
+      atomic(
+          p1plays := isTurnPl1(move);
+          P2 := chooseMove(move,P2,BoxList1);
+          BoxList1 := removeFromBoxes(move,BoxList1);
+        )
+ext wr BoxList1, P1, P2, p1plays
+post BoxList1~ <> BoxList1 and (P1~ <> P1 or P2~ <> P2);
+
+tally: set of Box * Player * Player ==> Player | <DRAW> | <UNFINISHED>
+tally(boxlist,player1,player2) == 
+    (if card boxlist=0 then 
+        (if card player1.boxes > card player2.boxes then
+            return player1
+        elseif card player1.boxes < card player2.boxes then
+            return player2
+        else 
+            return <DRAW>)
+    else 
+        return <UNFINISHED>)
+;
+
+
+end Habbouly16050314
