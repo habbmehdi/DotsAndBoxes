@@ -110,13 +110,13 @@ state  DBGame  of
    -- and
     forall i in set P1.movelist & 
     forall x in set P2.movelist &
-    i <> x                            --  players  don’t  share  moves
+    i <> x                            --  players  donâ€™t  share  moves
     and
     forall z in set BoxList1 &
     forall s in set z.moves & 
     i <> s 
     and 
-    i <> x                        --  played  moves  aren’t  available
+    i <> x                        --  played  moves  arenâ€™t  available
   --and
   --....                             --  other  invariants  of  interest
   init  s  ==  s  =  mk_DBGame(p1,p2,true,BoxList)
