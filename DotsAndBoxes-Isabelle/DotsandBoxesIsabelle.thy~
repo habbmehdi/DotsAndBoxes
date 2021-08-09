@@ -1,0 +1,864 @@
+theory Habbouly160503144
+imports VDMToolkit VDMSet VDMRecord 
+
+begin
+
+text {*  HABBOULY MEHDI 160503144*}
+
+
+(*=========================================================================================*)
+section {* Introduction *}
+
+
+text {* Write here your design decisions as text.
+
+        It is a good idea to structure your Isabelle model per VDM construct 
+        in (sub)sections. We add section snipets for you below.
+
+        Key features of Isabelle syntax needed in the definitions are given as 
+        comments. 
+      *}
+
+(*=========================================================================================*)
+section {* VDM values *}
+
+text {* Write here values you might have declared in Overture. Remember that in Isabelle
+        you must declare before you can use! VDM values can be given as Isabelle @{term abbreviation}.
+      *}
+
+(* In VDM it would look like: 
+        SIZE : nat = 3;
+
+   In Isabelle:
+        abbreviation name :: "TYPE" where "name \<equiv> EXPR"
+
+--{* abbreviation name :: "TYPE" where "name \<equiv> EXPR" *}
+*)
+
+
+abbreviation 
+    SIZE :: "VDMNat1"
+where
+    "SIZE \<equiv> 4"
+
+abbreviation 
+    BOXN :: "VDMNat1"
+where
+    "BOXN \<equiv> 2*SIZE + 1"
+
+abbreviation 
+    DOTN :: "VDMNat1"
+where
+    "DOTN \<equiv> SIZE * SIZE"
+
+
+(*=========================================================================================*)
+section {* VDM types and their invariants *}
+
+text {* VDM enumerations can be Isabelle data type. For example *}
+
+(*--{* datatype name :: name = VALUE1 | VALUEN *}*)
+(*datatype Player = NOUGHT | CROSS*)
+
+print_theorems  (*--"curiosity: Player type has loads of useful facts in Isabelle!"*)
+
+text {* VDM types like pairs can be constructed with @{term type_synonym}. 
+        VDM type invariants are functions from the type to boolean. Remember 
+        that you need to define and check type invariants manually in Isabelle!
+
+        As in VDM, you can write pattern matching (let) expressions to simplify models.
+        For example, we use a let expression below in the invariant definition for type Pos. 
+      *}
+
+(*  In VDM it would look like:
+  
+      Pos = nat * nat
+      inv mk_(x,y) == x <= SIZE and y <= SIZE
+
+      inv_Pos : nat * nat -> bool
+      inv_Pos(x,y) == x <= SIZE and y <= SIZE
+*)
+
+(*{* type_synonym name = "TYPE_EXPR" *}*)
+type_synonym Dot = VDMNat1
+
+(*{* definition name :: "TYPE1 \<Rightarrow> TYPN \<Rightarrow> RES_TYPE" where "name \<equiv> DEF" *}*)
+definition 
+  inv_Dot :: "VDMNat1 \<Rightarrow> bool"
+where
+  "inv_Dot dot \<equiv>  inv_VDMNat1 dot  \<and> dot \<le> DOTN "
+
+
+record Move = 
+  dot1field:: Dot
+  dot2field:: Dot
+
+definition 
+  inv_Move :: "Move \<Rightarrow> bool"
+  where
+  "inv_Move m \<equiv> (let x=(dot1field m); s=(dot2field m) in 
+                    inv_Dot x \<and>
+                    inv_Dot s \<and>
+                    (if (x mod SIZE) = 0 then
+                    s = x+SIZE
+                    else
+                    s = x+SIZE \<or> s = x+1 ))" 
+
+
+record Player = 
+  boxesfield:: "VDMNat1 VDMSet" 
+  movelistfield:: "Move VDMSet"
+
+
+record Box =
+  nofield:: VDMNat1
+  movesfield:: "Move VDMSet"
+
+definition 
+  inv_Box :: "Box \<Rightarrow> bool"
+  where 
+  "inv_Box b \<equiv> inv_VDMNat1(nofield b) \<and> vdm_card (movesfield b) \<le> 4 \<and>  (\<forall> x \<in> (movesfield b) . inv_Move(x))"
+
+
+type_synonym Boxs = "Box VDMSet"
+
+
+
+definition 
+  inv_Boxs :: "Boxs \<Rightarrow> bool"
+  where 
+  "inv_Boxs b \<equiv>  vdm_card (b) \<le> BOXN \<and> (\<forall> x \<in> b . ( inv_Box(x) ))"
+
+datatype result = P1HASWON | P2HASWON | DRAW
+
+abbreviation 
+    p1 :: "Player"
+    where 
+    "p1 \<equiv> \<lparr> boxesfield = {} , movelistfield = {}\<rparr>"
+
+abbreviation 
+    p2 :: "Player"
+    where 
+    "p2 \<equiv> \<lparr> boxesfield = {} , movelistfield = {}\<rparr>"
+
+abbreviation 
+    q :: "VDMNat1 VDMSet"
+    where 
+    "q \<equiv> {1 .. (DOTN-SIZE)}"
+
+abbreviation 
+    BoxList :: "Boxs"
+    where 
+    "BoxList \<equiv> { \<lparr>nofield = s , movesfield = { \<lparr>dot1field = s, dot2field = s+1\<rparr>,
+                                               \<lparr>dot1field = s, dot2field = s+SIZE\<rparr>,
+                                               \<lparr>dot1field = s+1, dot2field = s+1+SIZE\<rparr>,
+                                               \<lparr>dot1field = s+SIZE, dot2field = s+1+SIZE\<rparr>}\<rparr> 
+                                               | s . s \<in> q \<and> s mod SIZE \<noteq> 0}"
+
+
+
+(*=========================================================================================*)
+section {* VDM functions *}
+
+text {* VDM functions can be described using Isabelle @{term definition} 
+        (e.g. predicates, or basic functions) or @{term fun} (e.g. recursive definitions). 
+     *}
+
+(*-----------------------------------------------------------------------------------------*)
+subsection {* Explicitly defined functions *}
+
+text {* Encode here your explicitly defined VDM functions. Remember that you need to define
+        and check type invariants, as well as VDM pre/post conditions manually in Isabelle!
+
+        For every VDM function, you need to define three entities: function itself, and
+        its pre and post conditions. 
+
+        Precondition definitions go from function parameters to bool, whereas
+        postcondition definitions go from function parameters and result to bool.
+      *}
+(* In VDM these look like:
+        myFun: nat * nat -> nat
+        myFun(t1,t2) == t1 + t2
+          pre t1 > 0 and t2 > 0
+          post RESULT >= t1+t2;
+
+        pre_myFun: nat * nat -> bool
+        pre_myFun(t1,t2) == t1 > 0 and t2 > 0
+        
+        post_myFun: nat * nat * nat -> bool
+        post_myFun(t1,t2,RESULT) == RESULT >= t1+t2
+
+    Pre/Pos are optional in VDM explicit functions.
+*)
+
+definition 
+   isMoveFree :: "Move \<Rightarrow> Player \<Rightarrow> Player \<Rightarrow> bool"
+   where 
+   "isMoveFree move pl1 pl2 \<equiv> if (move \<in> movelistfield pl1) \<or> (move \<in> movelistfield pl2) then 
+False else True"
+
+definition 
+   isMoveInGame :: " Move \<Rightarrow> Boxs \<Rightarrow> bool " 
+   where 
+   "isMoveInGame move boxlist \<equiv> if \<exists> x \<in> boxlist . (move \<in> movesfield x) then 
+True else False"
+
+definition 
+  findBoxNum :: "Move \<Rightarrow> Boxs \<Rightarrow> VDMNat1 VDMSet"
+  where 
+  "findBoxNum move bl \<equiv>  {nofield x |x . x \<in> bl \<and> movesfield  x = {move}}"
+
+definition 
+  pre_findBoxNum :: "Move \<Rightarrow> Boxs \<Rightarrow> bool"
+  where 
+  "pre_findBoxNum move bl \<equiv> inv_Move(move) \<and> inv_Boxs(bl) \<and> isMoveInGame(move)(bl)"
+
+definition 
+  post_findBoxNum :: "VDMNat1 VDMSet \<Rightarrow> bool"
+  where
+  "post_findBoxNum boxlist \<equiv> \<forall> x \<in> boxlist . ( x < BOXN+SIZE-1 \<and> (x mod SIZE )\<noteq> 0)"
+
+definition 
+  removeFromBoxes :: " Move \<Rightarrow> Boxs \<Rightarrow> Boxs "
+  where
+  "removeFromBoxes m b \<equiv> {\<lparr>nofield = nofield x , movesfield = {y | y . y \<in> (movesfield x) \<and> y \<noteq> m}\<rparr> 
+                                        | x . x \<in> b} "
+
+definition 
+  pre_removeFromBoxes :: " Move \<Rightarrow> Boxs \<Rightarrow> bool "
+  where 
+  "pre_removeFromBoxes m b \<equiv> inv_Move (m) \<and> inv_Boxs (b) \<and> isMoveInGame(m)(b)"
+
+definition
+  post_removeFromBoxes ::" Move \<Rightarrow> Boxs \<Rightarrow> bool "
+  where
+  "post_removeFromBoxes m b \<equiv> \<not> isMoveInGame(m)(b) "
+
+definition 
+  assignBox :: "Move \<Rightarrow> Player \<Rightarrow> Boxs \<Rightarrow> Player "
+  where 
+  "assignBox m p b \<equiv>  \<lparr>boxesfield = boxesfield p \<union> findBoxNum (m)(b),movelistfield = movelistfield p\<rparr>"
+
+
+definition 
+  assignMove :: "Move \<Rightarrow> Player \<Rightarrow> Player" 
+  where 
+  "assignMove m p \<equiv>    \<lparr>boxesfield = boxesfield p,movelistfield = movelistfield p \<union> {m} \<rparr>"
+
+definition 
+  switchPlayers :: "bool \<Rightarrow> bool"
+  where
+  "switchPlayers p1plays \<equiv> if p1plays then False else True"
+
+
+definition 
+  isTurnPl1 :: "Move \<Rightarrow> Boxs \<Rightarrow> bool \<Rightarrow> bool"
+  where
+  "isTurnPl1 m b bo \<equiv> if \<exists> x \<in> b .( (movesfield x) = {m}) then bo 
+                      else switchPlayers(bo)" 
+
+definition 
+  pre_isTurnPl1 :: "Move \<Rightarrow> Boxs \<Rightarrow> bool \<Rightarrow> bool"
+  where
+  "pre_isTurnPl1 m b bo \<equiv>  inv_Move (m) \<and> inv_Boxs (b) \<and> (\<exists> x \<in> b .( m \<in> (movesfield x)))"
+
+definition 
+  tally :: "Player \<Rightarrow> Player \<Rightarrow> result"
+  where
+  "tally pl1 pl2 \<equiv> if vdm_card (movelistfield pl1) > vdm_card (movelistfield pl2 )then 
+                       P1HASWON 
+                    else 
+                    (if vdm_card (movelistfield pl1) < vdm_card (movelistfield pl2) then 
+                        P2HASWON
+                        else 
+                        DRAW)"
+
+definition 
+  pre_tally:: "Player \<Rightarrow> Player \<Rightarrow> bool" 
+  where
+  "pre_tally pl1 pl2 \<equiv> pl1 \<noteq> pl2"
+(*
+definition
+  myFun :: "nat \<Rightarrow> nat \<Rightarrow> nat"
+where
+  "myFun t1 t2 \<equiv> t1 + t2"
+
+print_theorems (*--"what Isabelle knows about @{term myFun}?"*)
+
+definition
+  pre_myFun :: "nat \<Rightarrow> nat \<Rightarrow> bool"
+where
+  "pre_myFun t1 t2 \<equiv> t1 > 0 \<and> t2 > 0"
+
+definition 
+  post_myFun :: "nat \<Rightarrow> nat \<Rightarrow> nat \<Rightarrow> bool"
+where
+  "post_myFun t1 t2 RESULT \<equiv> RESULT \<ge> t1+t2"
+*)
+
+(*-----------------------------------------------------------------------------------------*)
+subsection {* Implicitly defined functions *}
+
+text {* Encode here your implicitly defined VDM functions. Remember that you need to check
+        type invariants, as well as VDM pre/post conditions manually in Isabelle!
+      *}
+(* In VDM these look like:
+        myFun(T1 * T2) r: T3
+          [pre PRED]
+          post PRED;
+
+   Pre is optional; Post is mandatory in VDM implicit functions 
+*)
+
+(*=========================================================================================*)
+section {* VDM state *}
+
+record DBGame =
+  P1field :: Player
+  P2field :: Player
+  p1playsfield :: bool
+  BoxListfield :: Boxs
+
+definition 
+  inv_DBGame_flat :: "Player \<Rightarrow> Player \<Rightarrow> bool \<Rightarrow> Boxs \<Rightarrow> bool"
+  where
+  "inv_DBGame_flat pl1 pl2 pl1pl b \<equiv> \<forall> x \<in> movelistfield pl1 .
+                                     (\<forall> i \<in> movelistfield pl2 .
+                                     (i \<noteq> x \<and> 
+                                     (\<forall> y \<in> b  . 
+                                     (\<forall> z \<in> movesfield y .
+                                     (z \<noteq> i \<and> z \<noteq> x  )))))"
+
+
+definition 
+  inv_DBGame :: "DBGame \<Rightarrow> bool "
+  where
+  "inv_DBGame state \<equiv> inv_DBGame_flat (P1field state) 
+                                      (P2field state) 
+                                      (p1playsfield state) 
+                                      (BoxListfield state)"
+
+definition 
+  init_DBGame :: "DBGame"
+  where
+  "init_DBGame \<equiv> \<lparr> P1field = p1, P2field = p2, p1playsfield = True , BoxListfield = BoxList\<rparr>"
+
+definition 
+  post_init_DBGame :: "bool"
+  where
+  "post_init_DBGame \<equiv> inv_DBGame (init_DBGame)"
+
+(*=========================================================================================*)
+section {* VDM operations (over the state) *}
+
+definition 
+  pre_chooseMove :: " Move \<Rightarrow> DBGame \<Rightarrow> bool "
+  where
+  "pre_chooseMove m db \<equiv> inv_Move (m) \<and> inv_DBGame(db) \<and> isMoveInGame(m)(BoxListfield db) \<and>
+   (if (\<exists> x \<in> (BoxListfield db) . ((movesfield x ) = {m})) then 
+(\<exists> x \<in> (BoxListfield db) . ((nofield x) \<in> findBoxNum(m)(BoxListfield db) \<and> 
+isMoveFree(m)(P1field db)(P2field db) )) else isMoveFree(m)(P1field db)(P2field db))"
+
+
+definition 
+  post_chooseMove :: " Move \<Rightarrow> Player \<Rightarrow> Boxs \<Rightarrow> bool "
+  where 
+  "post_chooseMove m p b \<equiv> \<exists> x  \<in> (movelistfield p) .(x = m)"
+
+definition 
+  chooseMove :: " Move \<Rightarrow> Player \<Rightarrow> DBGame \<Rightarrow> Player "
+  where 
+  "chooseMove m p db \<equiv> if \<exists> x \<in> (BoxListfield db) .( (movesfield x) = {m} )then 
+                               assignBox(m)(p)(BoxListfield db)
+                      else 
+                               assignMove(m)(p)"
+
+definition 
+  pre_play_move :: "Move \<Rightarrow> DBGame \<Rightarrow> bool"
+  where
+  "pre_play_move m DB \<equiv> \<exists> x . (x \<in> BoxListfield DB \<and> m \<in> movesfield x)"
+
+definition 
+  post_play_move :: "Move \<Rightarrow> DBGame \<Rightarrow> DBGame \<Rightarrow> bool"
+  where
+
+  "post_play_move m preDB postDB \<equiv> \<forall> x \<in> BoxListfield postDB . (\<forall> y \<in> movesfield x .(m \<noteq> y  \<and>
+                                 BoxListfield postDB \<noteq> BoxListfield preDB \<and>
+                                 (P1field preDB \<noteq> P1field postDB \<or> 
+                                  P2field preDB \<noteq> P2field postDB))) "
+
+
+
+definition 
+  play_move :: "Move \<Rightarrow> DBGame \<Rightarrow> DBGame"
+  where 
+  "play_move m DB \<equiv> if p1playsfield DB then 
+                       \<lparr>P1field = chooseMove(m)(P1field DB)(DB),
+                       P2field = P2field DB,
+                       p1playsfield = isTurnPl1 (m)(BoxListfield DB)(p1playsfield DB) ,
+                       BoxListfield = removeFromBoxes(m)(BoxListfield DB)\<rparr>
+                     else 
+                      \<lparr>P1field = P1field DB,
+                       P2field =chooseMove(m)(P2field DB)(DB),
+                       p1playsfield = isTurnPl1 (m)(BoxListfield DB)(p1playsfield DB) ,
+                       BoxListfield = removeFromBoxes(m)(BoxListfield DB)\<rparr>" 
+(*=========================================================================================*)
+section {* VDM proof obligations *}
+
+text {* If you use Overture, generate proof obligation text and write it using Isabelle.
+        You can name your goals with the same name as the Overture PO for my reference.
+      *}
+(*-----------------------------------------------------------------------------------------*)
+subsection {* Well formedness (if any) *}
+
+(*{* lemma goal_name : "predicate" proof_script *}*)
+
+(*(exists dot:Habbouly160503144`Dot & (dot < (DOTN + 1)))*)
+
+lemma Dot_sat_obl: " \<exists> dot :: Dot . dot < (DOTN+1)"
+   by presburger
+
+
+(*((exists move:Habbouly160503144`Move & 
+(((move.dot2) > (move.dot1)) and 
+((DOTN >= (move.dot2)) and 
+(if (((move.dot1) mod SIZE) = 0)
+then ((move.dot2) = ((move.dot1) + SIZE))
+else (((move.dot2) = ((move.dot1) + 1)) 
+or ((move.dot2) = ((move.dot1) + SIZE))))))))*)
+
+lemma Move_sat_obl: " \<exists> Move m .                     
+                    inv_Dot (dot1field m) \<and>
+                    inv_Dot (dot2field m) \<and> 
+                    (dot1field m  )< (dot2field m )\<and>
+                    (if dot1field m mod SIZE = 0 then
+                    dot2field m = (dot1field m) +1 
+                    else
+                    dot2field m = (dot1field m) + SIZE \<or> 
+                    dot2field m = (dot1field m)+1 )"
+  unfolding  inv_Move_def
+             inv_Dot_def
+             inv_VDMNat1_def
+  by (metis Move.simps(1) Move.simps(2) add.commute numeral_le_iff numeral_times_numeral 
+      one_add_one one_le_numeral one_less_numeral_iff semiring_norm(11) semiring_norm(13) semiring_norm(68) 
+      semiring_norm(71) semiring_norm(76) zero_less_numeral zero_less_one)
+
+
+(*  (exists box:Habbouly160503144`Box & ((card (box.moves)) <= 4))  *)
+
+lemma Box_sat_obl: "\<exists> b :: Box . vdm_card (movesfield b) \<le> 4"
+  unfolding inv_Box_def
+            inv_VDMSet_def
+            inv_Move_def
+            inv_Dot_def
+            inv_VDMNat1_def
+            vdm_card_def
+  apply simp
+  by (metis Box.simps(2) card.empty empty_iff eq_numeral_Suc finite_if_finite_subsets_card_bdd 
+      infinite_super int_eq_iff_numeral int_nat_eq nat_numeral 
+      rel_simps(76) semiring_1_class.of_nat_simps(1) subsetI)
+  
+
+(*(forall s in set {1, ... ,(DOTN - SIZE)} & (((s mod SIZE) <> 0) => inv_Dot(s)))
+  and (forall s in set {1, ... ,(DOTN - SIZE)} & (((s mod SIZE) <> 0) => inv_Dot(s+1)))
+  and (forall s in set {1, ... ,(DOTN - SIZE)} & (((s mod SIZE) <> 0) => inv_Dot(s+SIZE)))*)
+  
+lemma Dot_sat_obl1:  "\<forall> s \<in>  {1 .. DOTN-SIZE} . (s mod SIZE) \<noteq> 0 \<longrightarrow> inv_Dot s \<and> inv_Dot (s+1) \<and> inv_Dot (s+SIZE) "
+  unfolding inv_Dot_def
+            inv_VDMNat1_def
+  by simp
+
+(*(forall s in set {1, ... ,(DOTN - SIZE)} & (((s mod SIZE) <> 0) => inv_Dot(s)))*)
+
+text {* Sledgehammer could not find any proof and nitpick could not find any counter-example.
+   the following lemma proves that for every s in the set {1,2,3,5,6,7,9,10,11}, (s+SIZE+1 == s+4+1) =< (DOTN = 16)
+   we can see without needing the help of isabelle that this is the case for every value in the set as the maximum value, 
+   11 , gives us the following : 11+4+1 = 16 *}
+
+
+lemma Dot_sat_obl2:  "\<forall> s \<in>  {1 .. DOTN-SIZE} . (s mod SIZE) \<noteq> 0 \<longrightarrow> inv_Dot ((s+SIZE)+1) "
+  unfolding inv_Dot_def
+            inv_VDMNat1_def
+  apply simp
+  apply safe
+  apply simp
+  apply safe
+  apply (case_tac s)
+  sorry
+  
+
+(*(forall s in set {1, ... ,(DOTN - SIZE)} & (((s mod SIZE) <> 0) => ((inv_Move(mk_Move(s, (s + 1))) and inv_Dot(s)) and inv_Dot((s + 1)))))
+  and (forall s in set {1, ... ,(DOTN - SIZE)} & (((s mod SIZE) <> 0) => ((inv_Move(mk_Move(s, (s + SIZE))) and inv_Dot(s)) and inv_Dot((s + SIZE)))))*)
+
+
+
+lemma BoxList1_Moves_sat_obl1: "\<forall> s \<in> { 1 .. DOTN-SIZE} . (s mod SIZE ) \<noteq> 0 \<longrightarrow> inv_Move( \<lparr>dot1field = s , dot2field = s+1\<rparr>)
+                         \<and> inv_Move( \<lparr>dot1field = s, dot2field = s+SIZE \<rparr>)"
+  unfolding inv_Move_def
+            inv_Dot_def
+            inv_VDMNat1_def
+  by simp
+
+  (*(forall s in set {1, ... ,(DOTN - SIZE)} & (((s mod SIZE) <> 0) => ((inv_Move(mk_Move((s + 1), ((s + 1) + SIZE))) and inv_Dot((s + 1))) and inv_Dot(((s + 1) + SIZE)))))
+  and (forall s in set {1, ... ,(DOTN - SIZE)} & (((s mod SIZE) <> 0) => ((inv_Move(mk_Move((s + SIZE), ((s + SIZE) + 1))) and inv_Dot((s + SIZE))) and inv_Dot(((s + SIZE) + 1)))))*)
+
+text {*Similarly to the Dot_sat_obl2 , Sledgehammer could not find any proof and nitpick could not find any counter-example
+       However, it is clear when we look at the definition of inv_Move that every value in the set {1,2,3,5,6,7,9,10,11} 
+       respects the invariant*}
+
+
+lemma BoxList1_Moves_sat_obl2: "\<forall> s \<in> { 1 .. DOTN-SIZE} . (s mod SIZE ) \<noteq> 0 \<longrightarrow> inv_Move \<lparr>dot1field = s+1 , dot2field = ((s+SIZE)+1)\<rparr>
+                         \<and>  inv_Move \<lparr>dot1field = s+SIZE , dot2field = ((s+SIZE)+1)\<rparr>"
+  unfolding inv_Move_def
+            inv_Dot_def
+            inv_VDMNat1_def
+  sorry
+
+(*(forall s in set {1, ... ,(DOTN - SIZE)} & (((s mod SIZE) <> 0) => inv_Box(mk_Box(s, {mk_Move(s, (s + 1)),
+                                                                                        mk_Move(s, (s + SIZE)),
+                                                                                        mk_Move((s + 1), ((s + 1) + SIZE)), 
+                                                                                        mk_Move((s + SIZE), ((s + SIZE) + 1))}))))*)
+
+lemma BoxList1_Boxes_sat_obl: " \<forall> s \<in> {1 .. DOTN-SIZE} . (s mod SIZE) \<noteq> 0 \<longrightarrow> inv_Box (\<lparr>nofield = s, movesfield = {\<lparr>dot1field = s,dot2field = s+1\<rparr>,
+                                                                                      \<lparr>dot1field = s,dot2field = s+SIZE\<rparr>,
+                                                                                      \<lparr>dot1field = s+1,dot2field = ((s+1)+SIZE)\<rparr>,
+                                                                                      \<lparr>dot1field = s+SIZE,dot2field = (s+1)+SIZE\<rparr>}\<rparr>)"
+
+  using  BoxList1_Moves_sat_obl2
+  unfolding 
+            inv_Box_def
+            inv_Move_def
+            inv_Dot_def    
+            inv_VDMNat1_def
+  by simp
+
+(*inv_Boxs({mk_Box(s, {mk_Move(s, (s + 1)), mk_Move(s, (s + SIZE)), mk_Move((s + 1), ((s + 1) + SIZE)), mk_Move((s + SIZE), ((s + SIZE) + 1))}) | s in set {1, ... ,(DOTN - SIZE)} & ((s mod SIZE) <> 0)})*)
+
+text {* here, we can clearly see that we are always creating an array of 9 boxes, never more never less, as is explained previously with the dot_sat_obl. since
+        since the Box inv asks only that the card of Boxs =< 9, it makes sense that it is the case below.*} 
+
+lemma Type_compatibility_Boxs_PO: "inv_Boxs({\<lparr>nofield = s,movesfield = {\<lparr>dot1field = s,dot2field = s+1\<rparr>,
+                                                                       \<lparr>dot1field = s,dot2field = s+SIZE\<rparr>,
+                                                                       \<lparr>dot1field = s+1,dot2field = ((s+1)+SIZE)\<rparr>,
+                                                                       \<lparr>dot1field = s+SIZE,dot2field = (s+1)+SIZE\<rparr>}\<rparr> |s. s \<in> {1 .. DOTN-SIZE} \<and> (s mod SIZE) \<noteq> 0})"
+  using  BoxList1_Boxes_sat_obl
+  apply simp
+  unfolding inv_Boxs_def
+            inv_Box_def
+            inv_Move_def
+            inv_Dot_def
+            inv_VDMNat1_def
+            inv_VDMSet_def
+            vdm_card_def
+  apply simp
+  apply safe
+  sorry
+
+(*(forall move:Habbouly160503144`Move, bl:set of (Habbouly160503144`Box) & inv_Boxs(bl))*)
+
+lemma findBoxNum_type_compatibility_PO: "\<forall> (move :: Move) (bl :: Boxs) .(inv_Move move \<and> inv_Boxs(bl))\<longrightarrow> inv_Boxs(bl)"
+  by simp
+
+(*(forall move:Habbouly160503144`Move, bl:set of (Habbouly160503144`Box) & (pre_findBoxNum(move, bl) => post_findBoxNum(move, bl, {(x.no) | x in set bl & ((x.moves) = {move})})))*)
+
+lemma findBoxNum_pre_post_PO: "\<forall> (move :: Move) (bl :: Boxs) . ( pre_findBoxNum(move )( bl) \<longrightarrow> post_findBoxNum( {nofield x |x . x \<in> bl \<and> movesfield  x = {move}}))"
+  unfolding pre_findBoxNum_def post_findBoxNum_def  inv_Boxs_def
+            inv_Box_def
+            inv_Move_def
+            inv_Dot_def
+            inv_VDMNat1_def
+            inv_VDMSet_def
+  apply simp
+  apply safe
+   apply simp
+  using zless_add1_eq apply auto[1]
+  oops
+
+
+(*(forall move:Habbouly160503144`Move, Boxes:set of (Habbouly160503144`Box) & 
+(pre_removeFromBoxes(move, Boxes) => 
+post_removeFromBoxes(move, Boxes, {mk_Box((box.no), 
+{x | x in set (box.moves) & (x <> move)}) | box in set Boxes})))*)
+
+lemma removeFromBoxes_pre_post_obl: "(\<forall> (move :: Move) (boxes :: Boxs) .(pre_removeFromBoxes(move)(boxes))
+\<longrightarrow> post_removeFromBoxes(move) ({\<lparr>nofield = nofield x , movesfield = {y | y . y \<in> (movesfield x) \<and> y \<noteq> move}\<rparr> 
+                                        | x . x \<in> boxes})) "
+
+  unfolding pre_removeFromBoxes_def
+            inv_Boxs_def
+            inv_Box_def
+            inv_Move_def
+            inv_Dot_def
+            inv_VDMNat1_def
+            inv_VDMSet_def
+            post_removeFromBoxes_def
+            inv_Boxs_def
+            inv_Box_def
+            inv_Move_def
+            inv_Dot_def
+            inv_VDMNat1_def
+            inv_VDMSet_def
+  apply simp
+  apply safe
+  by (smt Box.simps(2) isMoveInGame_def mem_Collect_eq)
+
+(*(forall move:Habbouly160503144`Move, Boxes:set of (Habbouly160503144`Box) & 
+((exists x in set Boxes & (move in set (x.moves))) => 
+(forall box in set Boxes & inv_Box(mk_Box((box.no), {x | x in set (box.moves) & (x <> move)})))))*)
+
+lemma removeFromBoxes_sat_obl_0: " (\<forall> (move :: Move) (boxes :: Boxs) . (pre_removeFromBoxes (move)(boxes) 
+\<longrightarrow> (\<forall> box \<in> boxes . ( inv_Box(box)))))"
+
+  
+  apply safe 
+  unfolding pre_removeFromBoxes_def
+            inv_Boxs_def
+            inv_Box_def
+            inv_Move_def
+            inv_Dot_def
+            inv_VDMNat1_def
+            inv_VDMSet_def
+  by simp
+
+
+text {* in the following PO , I was not able to prove using isabelle , But I believe that what I am trying is tru for the following reason: 
+        the lemma tries to prove that for every move and box that respect their invariant (box's invariant says that the card of it's movelist  must be  smaller or 
+        equal than 4), the box invariant is respected after removing a move from the box( { x | x . x \<in> (movesfield box) \<and> move \<noteq> x} is the 
+        part that isabelle doesn't seem to understand, which can be translated to : create a list with every value from the movelist of the box exept for any value = move. 
+        since I am never adding a Box, it makes sense that if the 
+        invariant is true for the box before removing a move, it must be true for the box after its card has been reduced .*}
+
+lemma removeFromBoxes_sat_obl_1: " (\<forall> (move :: Move) (boxes :: Boxs) . (pre_removeFromBoxes (move)(boxes) 
+\<longrightarrow> (\<forall> box \<in> boxes . ( inv_Box(\<lparr> nofield = nofield box , movesfield = { x | x . x \<in> (movesfield box) \<and> move \<noteq> x}\<rparr>)))))"
+
+  apply safe
+    unfolding pre_removeFromBoxes_def
+            inv_Boxs_def
+            inv_Box_def
+            inv_Move_def
+            inv_Dot_def
+            inv_VDMNat1_def
+            inv_VDMSet_def
+    apply simp
+    sorry
+
+(*(forall move:Habbouly160503144`Move, pl:Habbouly160503144`Player, boxl:set of (Habbouly160503144`Box) & pre_findBoxNum(move, boxl))*)
+
+lemma assign_box_legal_function_application: "\<forall> (move :: Move) (pl :: Player) (boxl :: Boxs) . ( inv_Move(move) \<and> inv_Boxs(boxl) \<longrightarrow> pre_findBoxNum(move)(boxl))"
+
+  apply safe 
+  apply simp
+  unfolding pre_findBoxNum_def
+            isMoveInGame_def
+            inv_Boxs_def
+            inv_Box_def
+            inv_Move_def
+            inv_Dot_def
+            inv_VDMNat1_def
+            inv_VDMSet_def
+  apply simp 
+  apply step
+  oops
+
+(*(exists P1:Habbouly160503144`Player, P2:Habbouly160503144`Player, p1plays:bool, BoxList1:set of 
+(Habbouly160503144`Box) & (forall i in set (P1.movelist) & (forall x in set (P2.movelist) & 
+((i <> x) and (forall z in set BoxList1 & (forall s in set (z.moves) & ((i <> s) and (i <> x))))))))*)
+
+
+lemma state_invariant_satisfiable: " \<exists> (p1 :: Player) (p2 :: Player) (p1plays :: bool) (BoxList1 :: Boxs) . 
+(\<forall> i \<in> movelistfield p1 . ( \<forall> x \<in> movelistfield p2 . ( i \<noteq> x \<and> (\<forall> z \<in> BoxList1 . ( \<forall> s \<in> movesfield z .( i \<noteq> s \<and> i \<noteq> x))))))" 
+
+  apply simp
+  unfolding  inv_Boxs_def 
+            inv_Box_def 
+            inv_Move_def 
+            inv_Dot_def 
+            inv_VDMNat1_def 
+            pre_findBoxNum_def 
+  by (metis Player.select_convs(2) equals0D)
+
+
+(*(forall move:Habbouly160503144`Move, ply1:Habbouly160503144`Player, oldstate:Habbouly160503144`DBGame & ((isMoveInGame(move, BoxList1) and (if (exists x in set BoxList1 & ((x.moves) = {move}))
+then (exists x in set BoxList1 & (((x.no) in set findBoxNum(move, BoxList1)) and isMoveFree(move, P1, P2)))
+else isMoveFree(move, P1, P2))) => inv_Boxs(BoxList1)))*)
+
+
+lemma chooseMove_type_compatibility_PO: "\<forall> (move :: Move) (ply1 :: Player) (oldstate :: DBGame) . (inv_Move(move) \<and> inv_DBGame(oldstate) \<longrightarrow> (isMoveInGame(move)(BoxListfield oldstate) \<and> 
+ (if (\<exists> x \<in> (BoxListfield oldstate) . ((movesfield x ) = {move})) then 
+(\<exists> x \<in> (BoxListfield oldstate) . ((nofield x) \<in> findBoxNum(move)(BoxListfield oldstate) \<and> 
+isMoveFree(move)(P1field oldstate)(P2field oldstate) )) else isMoveFree(move)(P1field oldstate)(P2field oldstate) \<longrightarrow> inv_Boxs(BoxListfield oldstate))))"
+
+  apply simp
+  apply safe
+  unfolding isMoveInGame_def inv_DBGame_def findBoxNum_def isMoveFree_def
+            inv_Boxs_def 
+            inv_VDMSet_def
+            inv_Box_def 
+            inv_Move_def 
+            inv_Dot_def 
+            inv_VDMNat1_def 
+      apply simp
+      apply blast
+      apply blast
+    apply simp
+    apply safe
+  oops
+    
+(*(forall move:Habbouly160503144`Move, ply1:Habbouly160503144`Player, oldstate:Habbouly160503144`DBGame & ((isMoveInGame(move, BoxList1) and (if (exists x in set BoxList1 & ((x.moves) = {move}))
+then (exists x in set BoxList1 & (((x.no) in set findBoxNum(move, BoxList1)) and isMoveFree(move, P1, P2)))
+else isMoveFree(move, P1, P2))) => (isMoveInGame(move, BoxList1) => ((exists x in set BoxList1 & ((x.moves) = {move})) => (forall x in set BoxList1 & pre_findBoxNum(move, BoxList1))))))*)
+
+lemma chooseMove_legal_function_application: "\<forall> (m :: Move) (ply1 :: Player) (db :: DBGame) .( inv_Move(m) \<and> inv_DBGame(db)\<and> isMoveInGame(m)(BoxListfield db) \<longrightarrow>  
+(isMoveInGame(m)(BoxListfield db) \<and> 
+ (if (\<exists> x \<in> (BoxListfield db) . ((movesfield x ) = {m})) then 
+(\<exists> x \<in> (BoxListfield db) . ((nofield x) \<in> findBoxNum(m)(BoxListfield db) \<and> 
+isMoveFree(m)(P1field db)(P2field db) )) else isMoveFree(m)(P1field db)(P2field db)) \<longrightarrow> (isMoveInGame(m)(BoxListfield db) \<longrightarrow> (\<exists> x \<in> (BoxListfield db) .(movesfield x) = {m} 
+\<longrightarrow>( \<forall> x \<in> BoxListfield db . (pre_findBoxNum(m)(BoxListfield db))) ))))"
+
+  apply simp
+  apply safe
+    unfolding isMoveInGame_def inv_DBGame_def findBoxNum_def isMoveFree_def
+            inv_Boxs_def 
+            inv_VDMSet_def
+            inv_Box_def 
+            inv_Move_def 
+            inv_Dot_def 
+            inv_VDMNat1_def 
+     apply safe
+     apply simp
+    oops
+
+(*(forall move:Habbouly160503144`Move, ply1:Habbouly160503144`Player, oldstate:Habbouly160503144`DBGame & ((isMoveInGame(move, BoxList1) and (if (exists x in set BoxList1 & ((x.moves) = {move}))
+then (exists x in set BoxList1 & (((x.no) in set findBoxNum(move, BoxList1)) and isMoveFree(move, P1, P2)))
+else isMoveFree(move, P1, P2))) => (exists x in set (RESULT.movelist) & (move = x))))*)
+
+lemma chooseMove_establishes_post_condition: "\<forall> (move :: Move) (ply1 :: Player) (oldstate :: DBGame) . (inv_Move(move) \<and> inv_DBGame(oldstate) \<longrightarrow>  (isMoveInGame(move)(BoxListfield oldstate) \<and> 
+ (if (\<exists> x \<in> (BoxListfield oldstate) . ((movesfield x ) = {move})) then 
+(\<exists> x \<in> (BoxListfield oldstate) . ((nofield x) \<in> findBoxNum(move)(BoxListfield oldstate) \<and> 
+isMoveFree(move)(P1field oldstate)(P2field oldstate) )) else isMoveFree(move)(P1field oldstate)(P2field oldstate)) \<longrightarrow> (\<exists> x \<in> (movelistfield (chooseMove(move)(ply1)(oldstate))) . (move = x))))"
+
+
+  apply simp 
+  apply safe 
+  unfolding  isMoveInGame_def inv_DBGame_def findBoxNum_def isMoveFree_def
+            inv_Boxs_def 
+            inv_VDMSet_def
+            inv_Box_def 
+            inv_Move_def 
+            inv_Dot_def 
+            inv_VDMNat1_def 
+  apply simp 
+   apply safe 
+  oops
+
+(*inv_Boxs(BoxList1)*)
+
+lemma boxlist_type_compatibility: "inv_Boxs(BoxList)"
+
+  using  Type_compatibility_Boxs_PO 
+  by simp     
+
+(*(inv_DBGame(mk_DBGame(P1, P2, p1plays, BoxList1)) =>
+inv_DBGame(mk_DBGame(chooseMove(move, P1, removeFromBoxes(move, BoxList1)), 
+P2, isTurnPl1(move, removeFromBoxes(move, BoxList1), p1plays), removeFromBoxes(move, BoxList1))))*)
+
+lemma state_invariant_holds0: " \<forall> (db :: DBGame) . (inv_DBGame(db)  \<longrightarrow> (\<forall> x \<in> BoxList . ( \<forall> move \<in> movesfield x . (inv_DBGame(
+   \<lparr> P1field = p1,
+     P2field = chooseMove(move)(p2)(init_DBGame),
+     p1playsfield = isTurnPl1(move)(removeFromBoxes(move)(BoxList))(p1playsfield init_DBGame), 
+     BoxListfield = removeFromBoxes(move)(BoxList)\<rparr>)))))"
+
+  apply simp
+  apply safe 
+  apply simp
+  apply safe
+  apply simp
+  unfolding inv_DBGame_def
+            inv_Boxs_def 
+            inv_Box_def 
+            inv_Move_def 
+            inv_Dot_def 
+            inv_VDMNat1_def 
+            removeFromBoxes_def
+            isTurnPl1_def
+     apply simp
+     apply safe
+      apply simp
+      apply blast
+     apply (simp add: inv_DBGame_flat_def)
+  using inv_DBGame_flat_def apply auto[1]
+  using inv_DBGame_flat_def apply auto[1]
+  using inv_DBGame_flat_def by auto
+
+(*(inv_DBGame(mk_DBGame(P1, P2, p1plays, BoxList1)) => inv_DBGame(mk_DBGame(P1, 
+chooseMove(move, P2, removeFromBoxes(move, BoxList1)), 
+isTurnPl1(move, removeFromBoxes(move, BoxList1), p1plays), removeFromBoxes(move, BoxList1))))*)
+
+lemma state_invariant_holds1: " \<forall> (db :: DBGame) . (inv_DBGame(db) \<longrightarrow> (\<forall> x \<in> BoxList . ( \<forall> move \<in> movesfield x . (inv_DBGame(
+   \<lparr> P1field = p1,
+     P2field = chooseMove(move)(p2)(init_DBGame),
+     p1playsfield = isTurnPl1(move)(removeFromBoxes(move)(BoxList))(p1playsfield init_DBGame), 
+     BoxListfield = removeFromBoxes(move)(BoxList)\<rparr>)))))"
+
+  apply simp
+  apply safe 
+  apply simp
+  apply safe
+  apply simp
+  unfolding inv_DBGame_def
+            inv_Boxs_def 
+            inv_Box_def 
+            inv_Move_def 
+            inv_Dot_def 
+            inv_VDMNat1_def 
+            removeFromBoxes_def
+            isTurnPl1_def
+     apply simp
+     apply safe
+      apply simp
+      apply blast
+     apply (simp add: inv_DBGame_flat_def)
+  using inv_DBGame_flat_def apply auto[1]
+  using inv_DBGame_flat_def apply auto[1]
+  using inv_DBGame_flat_def by auto
+
+
+lemma choose_Move_sat_obl :"P = NP   "
+  oops
+(*-----------------------------------------------------------------------------------------*)
+subsection {* Satisfiability (of each VDM operation) *}
+
+lemma myFun_satisfiability: "P = NP"
+oops
+
+(*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*)
+subsubsection {* Operation1 .. N *}
+
+lemma "P = NP"
+oops
+
+(*-----------------------------------------------------------------------------------------*)
+subsection {* Sanity checks *}
+
+lemma "P = NP"
+oops
+
+(*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*)
+subsubsection {* Single winner or draw *}
+
+lemma "P = NP"
+oops
+
+(*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*)
+subsubsection {* Moves within board maximum size *}
+
+lemma "P = NP"
+oops
+
+(*~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~*)
+subsubsection {* Moves fairness (i.e. one player move per round) *}
+
+lemma "P = NP"
+oops
+
+end
